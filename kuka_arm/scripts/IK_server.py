@@ -35,45 +35,28 @@ def handle_calculate_IK(req):
         # Create Modified DH parameters
         s = {alpha0:     0,    a0:      0,    d1: 0.68,
              alpha1: -pi/2,    a1:   0.42,    d2:    0,    q2: (q2 - pi/2),
-             alpha2:     0,    a2:   1.25,    d3:    0,
-             alpha3: -pi/2,    a3: -0.054,    d4:  1.5,
-             alpha4:  pi/2,    a4:      0,    d5:    0,
-             alpha5: -pi/2,    a5:      0,    d6:    0,
-             alpha6:     0,    a6:      0,    d7: 0.11,    q7: 0}
+             alpha2:     0,    a2:   1.25,    d3:    0}
 
         # Define Modified DH Transformation matrix
         T0_1 = transMat(q1, alpha0, d1, a0)
         T1_2 = transMat(q2, alpha1, d2, a1)
         T2_3 = transMat(q3, alpha2, d3, a2)
-        T3_4 = transMat(q4, alpha3, d4, a3)
-        T4_5 = transMat(q5, alpha4, d5, a4)
-        T5_6 = transMat(q5, alpha5, d6, a5)
-        T6_7 = transMat(q7, alpha6, d7, a6)
 
         T0_1 = T0_1.subs(s)
         T1_2 = T1_2.subs(s)
         T2_3 = T2_3.subs(s)
-        T3_4 = T3_4.subs(s)
-        T4_5 = T4_5.subs(s)
-        T5_6 = T5_6.subs(s)
-        T6_7 = T6_7.subs(s)
 
         # Create individual transformation matrices
         T0_2 = T0_1*T1_2
         T0_3 = T0_2*T2_3
-        T0_4 = T0_3*T3_4
-        T0_5 = T0_4*T4_5
-        T0_6 = T0_5*T5_6
-        T0_7 = T0_6*T6_7 # This is the full Homogeneous transform to the gripper
+
+        # Specify the intrinsic rotation matrix for correcting from DH to urdf
+        R_corr = Matrix([[0,  0, 1],
+                         [0, -1, 0],
+                         [1,  0, 0]])
 
         # Extract rotation matrices from the transformation matrices
-        R0_1 = T0_1[0:3,0:3]
-        R1_2 = T1_2[0:3,0:3]
-        R2_3 = T2_3[0:3,0:3]
-        R3_4 = T3_4[0:3,0:3]
-        R4_5 = T4_5[0:3,0:3]
-        R5_6 = T5_6[0:3,0:3]
-        R6_7 = T6_7[0:3,0:3]
+        R0_3 = T0_3[0:3,0:3]
         ###
 
         # Initialize service response
@@ -82,9 +65,9 @@ def handle_calculate_IK(req):
             # IK code starts here
             joint_trajectory_point = JointTrajectoryPoint()
 
-	    # Extract end-effector position and orientation from request
-	    # px,py,pz = end-effector position
-	    # roll, pitch, yaw = end-effector orientation
+	        # Extract end-effector position and orientation from request
+	        # px,py,pz = end-effector position
+	        # roll, pitch, yaw = end-effector orientation
             px = req.poses[x].position.x
             py = req.poses[x].position.y
             pz = req.poses[x].position.z
@@ -94,12 +77,33 @@ def handle_calculate_IK(req):
                     req.poses[x].orientation.z, req.poses[x].orientation.w])
 
             ### Your IK code here
-	    # Compensate for rotation discrepancy between DH parameters and Gazebo
-	    #
-	    #
-	    # Calculate joint angles using Geometric IK method
-	    #
-	    #
+	        # Compensate for rotation discrepancy between DH parameters and Gazebo
+            Rrpy = R_z(roll) * R_y(pitch) * R_x(yaw) * R_corr
+	        #
+	        # Calculate joint angles using Geometric IK method
+            wx = px - (0.303) * Rrpy[0,2] # x-coord of wrist position
+            wy = py - (0.303) * Rrpy[1,2] # y-coord of wrist position
+            wz = pz - (0.303) * Rrpy[2,2]# z-coord of wrist position
+
+            r = sqrt(wx**2 + wy**2) - 0.35
+            ss = wz - 0.75
+
+            k1 = 1.25
+            k2 = sqrt(0.96**2 + 0.054**2)
+
+            D = (r**2 + s**2 - k1**2 - k2**2)/(2*k1*k2)
+            K = (k1 + k2*D)/sqrt(r**2 + ss**2)
+
+            theta1 = atan2(wy, wx)
+            theta2 = atan2(ss, r) - atan2(sqrt(1 - K**2), K)
+            theta3 = atan2(D, sqrt(1 - D**2))
+
+            R36rpy = R0_3.evalf(subs={q1: theta1, q2: theta2, q3: theta3}) * Rrpy
+
+            theta4 = atan(-R36rpy[2,2], R36rpy[0,3])
+            theta5 = atan(sqrt(1 - R36rpy[1,2]**2), R36rpy[1,2])
+            theta6 = atan(-R36rpy[1,1], R36rpy[1,0])
+	        #
             ###
 
             # Populate response for the IK request
@@ -117,6 +121,24 @@ def transMat(q, alpha, d, a):
                 [sin(q)*sin(alpha), cos(q)*sin(alpha),  cos(alpha),  cos(alpha)*d],
                 [                 0,                0,           0,             1]])
     return T
+
+def R_x(q):
+    M_x = Matrix([[ 1,      0,       0],
+                  [ 0, cos(q), -sin(q)],
+                  [ 0, sin(q),  cos(q)]])
+    return M_x
+
+def R_y(q):
+    M_y = Matrix([[ cos(q), 0, sin(q)],
+                  [      0, 1,       0],
+                  [-sin(q), 0, cos(q)]])
+    return M_y
+
+def R_z(q):
+    M_z = Matrix([[ cos(q), -sin(q), 0],
+                  [ sin(q),  cos(q), 0],
+                  [ 0,            0, 1]])
+    return M_z
 
 
 def IK_server():

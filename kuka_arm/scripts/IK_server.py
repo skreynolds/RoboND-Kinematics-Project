@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 # Copyright (C) 2017 Electric Movement Inc.
 #
@@ -15,7 +15,7 @@ import tf
 from kuka_arm.srv import *
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from geometry_msgs.msg import Pose
-from mpmath import *
+import mpmath as mp
 from sympy import *
 
 
@@ -83,26 +83,26 @@ def handle_calculate_IK(req):
 	        # Calculate joint angles using Geometric IK method
             wx = px - (0.303) * Rrpy[0,2] # x-coord of wrist position
             wy = py - (0.303) * Rrpy[1,2] # y-coord of wrist position
-            wz = pz - (0.303) * Rrpy[2,2]# z-coord of wrist position
+            wz = pz - (0.303) * Rrpy[2,2] # z-coord of wrist position
 
-            r = sqrt(wx**2 + wy**2) - 0.35
+            r = mp.sqrt(mp.power(wx, 2) + mp.power(wy, 2)) - 0.35
             ss = wz - 0.75
 
             k1 = 1.25
-            k2 = sqrt(0.96**2 + 0.054**2)
+            k2 = mp.sqrt(mp.power(0.96, 2) + mp.power(0.054, 2))
 
-            D = (r**2 + s**2 - k1**2 - k2**2)/(2*k1*k2)
-            K = (k1 + k2*D)/sqrt(r**2 + ss**2)
+            D = (mp.power(r, 2) + mp.power(ss, 2) - mp.power(k1, 2) - mp.power(k2,2))/(2*k1*k2)
+            K = (k1 + k2*D)/mp.sqrt(mp.power(r, 2) + mp.power(ss, 2))
 
-            theta1 = atan2(wy, wx)
-            theta2 = atan2(ss, r) - atan2(sqrt(1 - K**2), K)
-            theta3 = atan2(D, sqrt(1 - D**2))
+            theta1 = mp.atan2(wy, wx)
+            theta2 = mp.atan2(ss, r) - mp.atan2(mp.sqrt(1 - mp.power(K, 2)), K)
+            theta3 = mp.atan2(D, mp.sqrt(1 - mp.power(D, 2)))
 
             R36rpy = R0_3.evalf(subs={q1: theta1, q2: theta2, q3: theta3}) * Rrpy
 
-            theta4 = atan(-R36rpy[2,2], R36rpy[0,3])
-            theta5 = atan(sqrt(1 - R36rpy[1,2]**2), R36rpy[1,2])
-            theta6 = atan(-R36rpy[1,1], R36rpy[1,0])
+            theta4 = mp.atan2(-R36rpy[2,2], R36rpy[0,2])
+            theta5 = mp.atan2(mp.sqrt(1 - mp.power(R36rpy[1,2], 2)), R36rpy[1,2])
+            theta6 = mp.atan2(-R36rpy[1,1], R36rpy[1,0])
 	        #
             ###
 

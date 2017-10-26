@@ -1,8 +1,7 @@
 from sympy import *
 from time import time
-from mpmath import radians
+from mpmath import *
 import tf
-
 '''
 Format of test case is [ [[EE position],[EE orientation as quaternions]],[WC location],[joint angles]]
 You can generate additional test cases by setting up your kuka project and running `$ roslaunch kuka_arm forward_kinematics.launch`
@@ -58,11 +57,29 @@ def test_code(test_case):
 
     req = Pose(comb)
     start_time = time()
-    
+
     ########################################################################################
-    ## 
+    ##
 
     ## Insert IK code here!
+    
+    px = req.poses[x].position.x
+            py = req.poses[x].position.y
+            pz = req.poses[x].position.z
+
+    (roll, pitch, yaw) = tf.transformations.euler_from_quaternion(
+        [req.poses[x].orientation.x, req.poses[x].orientation.y,
+            req.poses[x].orientation.z, req.poses[x].orientation.w])
+    
+    R_corr = Matrix([[0,  0, 1],
+                     [0, -1, 0],
+                     [1,  0, 0]])
+    
+    Rrpy = R_z(roll) * R_y(pitch) * R_x(yaw) * R_corr
+    
+    wx = px - (0.303) * Rrpy[0,2] # x-coord of wrist position
+    wy = py - (0.303) * Rrpy[1,2] # y-coord of wrist position
+    wz = pz - (0.303) * Rrpy[2,2] # z-coord of wrist position
     
     theta1 = 0
     theta2 = 0
@@ -71,9 +88,9 @@ def test_code(test_case):
     theta5 = 0
     theta6 = 0
 
-    ## 
+    ##
     ########################################################################################
-    
+
     ########################################################################################
     ## For additional debugging add your forward kinematics here. Use your previously calculated thetas
     ## as the input and output the position of your end effector as your_ee = [x,y,z]

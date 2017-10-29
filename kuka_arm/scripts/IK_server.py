@@ -15,7 +15,7 @@ import tf
 from kuka_arm.srv import *
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from geometry_msgs.msg import Pose
-import mpmath as mp
+from mpmath import *
 from sympy import *
 
 
@@ -33,8 +33,8 @@ def handle_calculate_IK(req):
         alpha0, alpha1, alpha2, alpha3, alpha4, alpha5, alpha6 = symbols('alpha0:7')
 
         # Create Modified DH parameters
-        s = {alpha0:     0,    a0:      0,    d1: 0.68,
-             alpha1: -pi/2,    a1:   0.42,    d2:    0,    q2: (q2 - pi/2),
+        s = {alpha0:     0,    a0:      0,    d1: 0.75,
+             alpha1: -pi/2,    a1:   0.35,    d2:    0,    q2: (q2 - pi/2),
              alpha2:     0,    a2:   1.25,    d3:    0}
 
         # Define Modified DH Transformation matrix
@@ -75,34 +75,37 @@ def handle_calculate_IK(req):
             (roll, pitch, yaw) = tf.transformations.euler_from_quaternion(
                 [req.poses[x].orientation.x, req.poses[x].orientation.y,
                     req.poses[x].orientation.z, req.poses[x].orientation.w])
+            # Define Modified DH Transformation matrix
 
             ### Your IK code here
 	        # Compensate for rotation discrepancy between DH parameters and Gazebo
-            Rrpy = R_z(roll) * R_y(pitch) * R_x(yaw) * R_corr
+            Rrpy = R_z(yaw) * R_y(pitch) * R_x(roll) * R_corr
 	        #
 	        # Calculate joint angles using Geometric IK method
             wx = px - (0.303) * Rrpy[0,2] # x-coord of wrist position
             wy = py - (0.303) * Rrpy[1,2] # y-coord of wrist position
             wz = pz - (0.303) * Rrpy[2,2] # z-coord of wrist position
 
-            r = mp.sqrt(mp.power(wx, 2) + mp.power(wy, 2)) - 0.35
-            ss = wz - 0.75
+            r = sqrt(wx**2 + wy**2) - 0.35 #implemented okay
+            ss = wz - 0.75 #implemented okay
 
-            k1 = 1.25
-            k2 = mp.sqrt(mp.power(0.96, 2) + mp.power(0.054, 2))
+            k1 = 1.25 #implemented okay
+            k2 = 1.5 #implemented okay
 
-            D = (mp.power(r, 2) + mp.power(ss, 2) - mp.power(k1, 2) - mp.power(k2,2))/(2*k1*k2)
-            K = (k1 + k2*D)/mp.sqrt(mp.power(r, 2) + mp.power(ss, 2))
+            D = (k1**2 + k2**2 - (r**2 + ss**2))/(2 * k1 * k2) #implemented okay
+            K = (k1**2 + (r**2 + ss**2) - k2**2)/(2*sqrt(r**2 + ss**2)*k1) #implemented okay
 
-            theta1 = mp.atan2(wy, wx)
-            theta2 = mp.atan2(ss, r) - mp.atan2(mp.sqrt(1 - mp.power(K, 2)), K)
-            theta3 = mp.atan2(D, mp.sqrt(1 - mp.power(D, 2)))
+            # First three joint variables
+            theta1 = atan2(wy,wx).evalf()
+            theta2 = (pi/2 - atan2(ss,r) - atan2(sqrt(1 - K**2), K)).evalf()
+            theta3 = 1.53484 - atan2(sqrt(1 - D**2), D).evalf()
 
-            R36rpy = R0_3.evalf(subs={q1: theta1, q2: theta2, q3: theta3}) * Rrpy
+            R36rpy = (R0_3.transpose() * Rrpy).evalf(subs={q1: theta1, q2: theta2, q3: theta3})
 
-            theta4 = mp.atan2(-R36rpy[2,2], R36rpy[0,2])
-            theta5 = mp.atan2(mp.sqrt(1 - mp.power(R36rpy[1,2], 2)), R36rpy[1,2])
-            theta6 = mp.atan2(-R36rpy[1,1], R36rpy[1,0])
+            # Second three joint variables
+            theta4 = atan2(R36rpy[2,2], -R36rpy[0,2]).evalf()
+            theta5 = atan2(sqrt(1 - R36rpy[1,2]**2), R36rpy[1,2]).evalf()
+            theta6 = atan2(-R36rpy[1,1], R36rpy[1,0]).evalf()
 	        #
             ###
 

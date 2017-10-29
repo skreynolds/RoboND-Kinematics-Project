@@ -1,9 +1,8 @@
 from sympy import *
 from time import time
-from mpmath import *
+from mpmath import radians
 import tf
-'''
-Format of test case is [ [[EE position],[EE orientation as quaternions]],[WC location],[joint angles]]
+'''Formt of test case is [ [[EE position],[EE orientation as quaternions]],[WC location],[joint angles]]
 You can generate additional test cases by setting up your kuka project and running `$ roslaunch kuka_arm forward_kinematics.launch`
 From here you can adjust the joint angles to find thetas, use the gripper to extract positions and orientation (in quaternion xyzw) and lastly use link 5
 to find the position of the wrist center. These newly generated test cases can be added to the test_cases dictionary.
@@ -24,6 +23,30 @@ test_cases = {1:[[[2.16135,-1.42635,1.55109],
               4:[],
               5:[]}
 
+def R_x(q):
+    M_x = Matrix([[ 1,      0,       0],
+                  [ 0, cos(q), -sin(q)],
+                  [ 0, sin(q),  cos(q)]])
+    return M_x
+
+def R_y(q):
+    M_y = Matrix([[ cos(q), 0,  sin(q)],
+                  [      0, 1,       0],
+                  [-sin(q), 0, cos(q)]])
+    return M_y
+
+def R_z(q):
+    M_z = Matrix([[ cos(q), -sin(q), 0],
+                  [ sin(q),  cos(q), 0],
+                  [      0,       0, 1]])
+    return M_z
+
+def transMat(q, alpha, d, a):
+    T = Matrix([[           cos(q),           -sin(q),           0,             a],
+                [sin(q)*cos(alpha), cos(q)*cos(alpha), -sin(alpha), -sin(alpha)*d],
+                [sin(q)*sin(alpha), cos(q)*sin(alpha),  cos(alpha),  cos(alpha)*d],
+                [                0,                0,           0,             1]])
+    return T
 
 def test_code(test_case):
     ## Set up code
@@ -62,32 +85,80 @@ def test_code(test_case):
     ##
 
     ## Insert IK code here!
-    
+
     px = req.poses[x].position.x
-            py = req.poses[x].position.y
-            pz = req.poses[x].position.z
+    py = req.poses[x].position.y
+    pz = req.poses[x].position.z
 
     (roll, pitch, yaw) = tf.transformations.euler_from_quaternion(
         [req.poses[x].orientation.x, req.poses[x].orientation.y,
             req.poses[x].orientation.z, req.poses[x].orientation.w])
-    
+
+    # Create symbols
+    q1, q2, q3, q4, q5, q6, q7 = symbols('q1:8')
+    d1, d2, d3, d4, d5, d6, d7 = symbols('d1:8')
+    a0, a1, a2, a3, a4, a5, a6 = symbols('a0:7')
+    alpha0, alpha1, alpha2, alpha3, alpha4, alpha5, alpha6 = symbols('alpha0:7')
+
+    # Create Modified DH parameters
+    s = {alpha0:     0,    a0:      0,    d1: 0.75,
+         alpha1: -pi/2,    a1:   0.35,    d2:    0,    q2: (q2 - pi/2),
+         alpha2:     0,    a2:   1.25,    d3:    0}
+
+    # Define Modified DH Transformation matrix
+    T0_1 = transMat(q1, alpha0, d1, a0)
+    T1_2 = transMat(q2, alpha1, d2, a1)
+    T2_3 = transMat(q3, alpha2, d3, a2)
+
+    T0_1 = T0_1.subs(s)
+    T1_2 = T1_2.subs(s)
+    T2_3 = T2_3.subs(s)
+
+    # Create individual transformation matrices
+    T0_2 = T0_1*T1_2
+    T0_3 = T0_2*T2_3
+
+    pprint(R_z(pi)*R_y(-pi/2))
     R_corr = Matrix([[0,  0, 1],
                      [0, -1, 0],
                      [1,  0, 0]])
-    
-    Rrpy = R_z(roll) * R_y(pitch) * R_x(yaw) * R_corr
-    
+
+    # Extract rotation matrices from the transformation matrices
+    R0_3 = T0_3[0:3,0:3] # this expression is fine
+
+    Rrpy = R_z(yaw) * R_y(pitch) * R_x(roll) * R_corr # this expression is fine
+
     wx = px - (0.303) * Rrpy[0,2] # x-coord of wrist position
     wy = py - (0.303) * Rrpy[1,2] # y-coord of wrist position
     wz = pz - (0.303) * Rrpy[2,2] # z-coord of wrist position
-    
-    theta1 = 0
-    theta2 = 0
-    theta3 = 0
-    theta4 = 0
-    theta5 = 0
-    theta6 = 0
 
+    r = sqrt(wx**2 + wy**2) - 0.35 #implemented okay
+    ss = wz - 0.75 #implemented okay
+
+    k1 = 1.25 #implemented okay
+    k2 = 1.5 #implemented okay
+
+    D = (k1**2 + k2**2 - (r**2 + ss**2))/(2 * k1 * k2) #implemented okay
+    K = (k1**2 + (r**2 + ss**2) - k2**2)/(2*sqrt(r**2 + ss**2)*k1) #implemented okay
+
+    # First three joint variables
+    theta1 = atan2(wy,wx).evalf()
+    theta2 = (pi/2 - atan2(ss,r) - atan2(sqrt(1 - K**2), K)).evalf()
+    theta3 = 1.53484 - atan2(sqrt(1 - D**2), D).evalf()
+
+    R36rpy = (R0_3.transpose() * Rrpy).evalf(subs={q1: theta1, q2: theta2, q3: theta3})
+
+    # Second three joint variables
+
+    theta5 = atan2(sqrt(1 - R36rpy[1,2]**2), R36rpy[1,2]).evalf()
+    theta4 = atan2(R36rpy[2,2], -R36rpy[0,2]).evalf()
+    theta6 = atan2(-R36rpy[1,1], R36rpy[1,0]).evalf()
+    print(theta1)
+    print(theta2)
+    print(theta3)
+    print(theta4)
+    print(theta5)
+    print(theta6)
     ##
     ########################################################################################
 
@@ -101,7 +172,7 @@ def test_code(test_case):
     ########################################################################################
 
     ## For error analysis please set the following variables of your WC location and EE location in the format of [x,y,z]
-    your_wc = [1,1,1] # <--- Load your calculated WC values in this array
+    your_wc = [wx,wy,wz] # <--- Load your calculated WC values in this array
     your_ee = [1,1,1] # <--- Load your calculated end effector value from your forward kinematics
     ########################################################################################
 
@@ -153,6 +224,6 @@ def test_code(test_case):
 
 if __name__ == "__main__":
     # Change test case number for different scenarios
-    test_case_number = 1
+    test_case_number = 3
 
     test_code(test_cases[test_case_number])

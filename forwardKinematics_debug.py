@@ -67,21 +67,6 @@ T4_5 = T4_5.subs(s)
 T5_6 = T5_6.subs(s)
 T6_7 = T6_7.subs(s)
 
-print('\nT0_1 =\n')
-pprint(T0_1)
-print('\nT1_2 =\n')
-pprint(T1_2)
-print('\nT2_3 =\n')
-pprint(T2_3)
-print('\nT3_4 =\n')
-pprint(T3_4)
-print('\nT4_5 = \n')
-pprint(T4_5)
-print('\nT5_6 =\n')
-pprint(T5_6)
-print('\nT6_7 =\n')
-pprint(T6_7)
-
 ### Incrementally build the transform from the base link to the
 ### gripper link (intrinsic rotation = post-mult)
 T0_2 = T0_1*T1_2
@@ -105,35 +90,22 @@ R_Y = Matrix([[0, 0, -1, 0],
 T_corr = R_Z*R_Y # intrinsic rotation = post
 
 ### Numerically evaluate transforms
-s_dict = {q1: 0, q2: 0, q3: 0, q4: 0, q5: 0, q6: 0} #test_initial
-#s_dict = {q1: -0.65, q2: 0.45, q3: -0.35, q4: 0.91, q5: 0.78, q6: 0.5} #test_1
-#s_dict = {q1: -0.79, q2: -0.11, q3: -2.33, q4: 1.94, q5: 1.14, q6: -3.68} #test_2
-#s_dict = {q1: -2.99, q2: -0.12, q3: 0.94, q4: 4.06, q5: 1.29, q6: -4.12} #test_3
-### (compared with the output of tf_echo)
-print('\nT0_1 =\n')
-pprint(T0_1.evalf(subs=s_dict))
-print('\nT0_2 =\n')
-pprint(T0_2.evalf(subs=s_dict))
-print('\nT0_3 =\n')
-pprint(T0_3.evalf(subs=s_dict))
-print('\nT0_4 =\n')
-pprint(T0_4.evalf(subs=s_dict))
-print('\nT0_5 = \n')
-pprint(T0_5.evalf(subs=s_dict))
-print('\nT0_6 =\n')
-pprint(T0_6.evalf(subs=s_dict))
-print('\nT0_7 =\n')
-pprint(T0_7.evalf(subs=s_dict))
+s_dict_1 = {q1: 0, q2: 0, q3: 0, q4: 0, q5: 0, q6: 0} #test_initial
+s_dict_2 = {q1: -0.65, q2: 0.45, q3: -0.37, q4: 0.96, q5: 0.78, q6: 0.46} #test_1
+s_dict_3 = {q1: -0.79, q2: -0.11, q3: -2.34, q4: 1.96, q5: 1.14, q6: -3.69} #test_2
+s_dict_4 = {q1: -2.99, q2: -0.12, q3: 0.94, q4: 4.06, q5: 1.29, q6: -4.15} #test_3
 
-### The corrected homogeneous tform from the base link to the end
-### effector
+### Print out the results for the test cases 1 to 4
 T_total = T0_7*T_corr
-print('\nT0_7_corrected =\n')
-pprint(T_total.evalf(subs=s_dict))
 
-print('\nRotation Matrix from Simulation = \n')
-R = tf.transformations.quaternion_matrix([0.013, -0.229, 0.900, 0.368])
-print(R)
+print('\nT0_7_corrected test case 1 =\n')
+pprint(T_total.evalf(subs=s_dict_1))
 
-#print('\nThe transformation from 0 to 3:\n')
-#pprint(T3_4*T4_5*T5_6)
+print('\nT0_7_corrected test case 2 =\n')
+pprint(T_total.evalf(subs=s_dict_2))
+
+print('\nT0_7_corrected test case 3 =\n')
+pprint(T_total.evalf(subs=s_dict_3))
+
+print('\nT0_7_corrected test case 4 =\n')
+pprint(T_total.evalf(subs=s_dict_4))

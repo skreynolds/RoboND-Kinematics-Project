@@ -135,5 +135,5 @@ print('\nRotation Matrix from Simulation = \n')
 R = tf.transformations.quaternion_matrix([0.013, -0.229, 0.900, 0.368])
 print(R)
 
-#print('\nThe transformation from 0 to 3:\n')
-#pprint(T3_4*T4_5*T5_6)
+print('\nThe transformation from 0 to 3:\n')
+pprint(T3_4*T4_5*T5_6)
